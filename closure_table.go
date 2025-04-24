@@ -8,6 +8,7 @@ type INode interface {
 
 // ClosureTable 闭包表
 type ClosureTable struct {
+	TreeID     uint // 树ID，根节点ID
 	Ancestor   uint // 祖先节点ID
 	Descendant uint // 后代节点ID
 	Distance   uint // 祖先距离后代的距离
@@ -57,12 +58,25 @@ func generateTree(nodes []INode) *tree {
 	return root
 }
 
+// findTreeRoot 寻找节点所属的树根节点
+func findTreeRoot(node *tree) uint {
+	// 遍历到顶层非虚拟节点
+	current := node
+	for current.Father != nil && current.Father.ID != 0 {
+		current = current.Father
+	}
+	return current.ID
+}
+
 // generateClosureTable 生成闭包表
 func generateClosureTable(node *tree) []*ClosureTable {
 	ct := make([]*ClosureTable, 0)
 	for _, son := range node.Sons {
+		// 查找该节点所属的树根ID
+		treeID := findTreeRoot(son)
 		// 自身到自身的距离为零
 		self := &ClosureTable{
+			TreeID:     treeID,
 			Ancestor:   son.ID,
 			Descendant: son.ID,
 			Distance:   0,
@@ -72,6 +86,7 @@ func generateClosureTable(node *tree) []*ClosureTable {
 		fatherCt := make([]*ClosureTable, 0)
 		for father := son.Father; father != nil && father.ID != 0; father = father.Father {
 			fatherCt = append(fatherCt, &ClosureTable{
+				TreeID:     treeID,
 				Ancestor:   father.ID,
 				Descendant: son.ID,
 				Distance:   son.level - father.level,
