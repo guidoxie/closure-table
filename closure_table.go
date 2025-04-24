@@ -14,86 +14,55 @@ type ClosureTable struct {
 	Distance   uint // 祖先距离后代的距离
 }
 
-// tree 树
-type tree struct {
-	ID       uint // 节点ID
-	ParentID uint // 父节点ID
-	Sons     []*tree
-	Father   *tree
-	level    uint
-}
-
 // Generate 生成闭包表
 func Generate(nodes []INode) []*ClosureTable {
-	tree := generateTree(nodes)
-	return generateClosureTable(tree)
-}
-
-// AttachNode 添加子节点
-func (n *tree) attachNode(node *tree) bool {
-	if n.ID == node.ParentID {
-		n.Sons = append(n.Sons, node)
-		node.Father = n
-		node.level = n.level + 1
-		return true
-	}
-	for _, son := range n.Sons {
-		if son.attachNode(node) {
-			return true
-		}
-	}
-	return false
-}
-
-// generateTree 生成树
-func generateTree(nodes []INode) *tree {
-	// 构建树形结构,虚拟头节点
-	root := &tree{}
+	// 映射节点 ID 到其父节点 ID
+	parentMap := make(map[uint]uint)
 	for _, node := range nodes {
-		root.attachNode(&tree{
-			ID:       node.GetID(),
-			ParentID: node.GetParentID(),
-		})
+		parentMap[node.GetID()] = node.GetParentID()
 	}
-	return root
-}
+	// 缓存每个节点的 TreeID（即其根节点 ID）
+	treeIDMap := make(map[uint]uint)
 
-// findTreeRoot 寻找节点所属的树根节点
-func findTreeRoot(node *tree) uint {
-	// 遍历到顶层非虚拟节点
-	current := node
-	for current.Father != nil && current.Father.ID != 0 {
-		current = current.Father
-	}
-	return current.ID
-}
-
-// generateClosureTable 生成闭包表
-func generateClosureTable(node *tree) []*ClosureTable {
-	ct := make([]*ClosureTable, 0)
-	for _, son := range node.Sons {
-		// 查找该节点所属的树根ID
-		treeID := findTreeRoot(son)
-		// 自身到自身的距离为零
-		self := &ClosureTable{
+	var closures []*ClosureTable
+	for _, node := range nodes {
+		treeID := findRootID(node.GetID(), parentMap, treeIDMap)
+		// 添加自身闭包
+		closures = append(closures, &ClosureTable{
 			TreeID:     treeID,
-			Ancestor:   son.ID,
-			Descendant: son.ID,
+			Ancestor:   node.GetID(),
+			Descendant: node.GetID(),
 			Distance:   0,
-		}
-		ct = append(ct, self)
-		// 往上找祖先，father.ID !=0 是为了不计算虚拟头节点
-		fatherCt := make([]*ClosureTable, 0)
-		for father := son.Father; father != nil && father.ID != 0; father = father.Father {
-			fatherCt = append(fatherCt, &ClosureTable{
+		})
+		// 向上遍历祖先，逐级生成闭包
+		depth := 1
+		parent := parentMap[node.GetID()]
+		for parent != 0 {
+			closures = append(closures, &ClosureTable{
 				TreeID:     treeID,
-				Ancestor:   father.ID,
-				Descendant: son.ID,
-				Distance:   son.level - father.level,
+				Ancestor:   parent,
+				Descendant: node.GetID(),
+				Distance:   uint(depth),
 			})
+			parent = parentMap[parent]
+			depth++
 		}
-		ct = append(ct, fatherCt...)
-		ct = append(ct, generateClosureTable(son)...)
 	}
-	return ct
+	return closures
+}
+
+// 向上查找根节点 ID 作为 TreeID，并缓存
+func findRootID(id uint, parentMap map[uint]uint, cache map[uint]uint) uint {
+	if treeID, ok := cache[id]; ok {
+		return treeID
+	}
+	node, exists := parentMap[id]
+	if !exists || node == 0 {
+		cache[id] = id
+		return id
+	}
+
+	treeID := findRootID(node, parentMap, cache)
+	cache[id] = treeID
+	return treeID
 }
